@@ -1,268 +1,114 @@
-# Development Plan: EduBot
+# Product Requirements Document: EduBot
 
 **Version:** 1.0 (MVP)
 **Status:** Draft for Review
 **Owner:** Abhishek
-**Related documents:** PRD v1.0, SRS v1.0, Architecture v1.0, UI/UX v1.0
 
 ---
 
-## 1. Purpose
+## 1. Problem Statement
 
-This plan converts the PRD, SRS, Architecture, and UI/UX documents into an ordered, dependency-aware build sequence with clear milestones and a Definition of Done (DoD) for each. It exists so implementation can start immediately without re-deriving scope or sequencing decisions.
+Students preparing for Class 9–11 science syllabi rely on scattered resources — textbooks, YouTube videos, tuition notes, and general-purpose chatbots — to get their doubts resolved. General-purpose AI chatbots are not grounded in the student's actual syllabus, which leads to two failure modes: (1) they answer confidently with content outside the syllabus scope (extra depth, wrong curriculum, hallucinated facts), and (2) they hand over final answers directly, which shortcuts learning and reduces retention.
 
-**Time budget context (from prior notes):** v1 MVP is scoped for roughly 4–6 focused hours of build time, so phases below are intentionally small and sequential, not parallelizable across a team.
+There is no lightweight, syllabus-scoped conversational tool that lets a student ask a question, get an answer grounded strictly in their curriculum, and — when working through a problem — get guided toward the solution rather than just told the answer.
 
----
+## 2. Target Users
 
-## 2. Guiding Priorities
-
-1. **Grounding correctness before polish.** A working retrieval + refusal loop matters more than UI styling.
-2. **Measure before declaring done.** No phase involving answer quality is "done" until it's been run against the test set.
-3. **Avoid scope creep.** Anything in the PRD's "Out-of-Scope" list (OCR, hints, auth, multi-subject) is not touched in this plan.
-4. **Deploy early, iterate live.** Get a bare-bones version deployed before polishing, so integration/hosting risk surfaces early rather than at the end.
-
----
-
-## 3. Phase Overview and Dependencies
-
-```
-Phase 0: Setup
-    ↓
-Phase 1: Data Layer (corpus + embeddings + vector store)
-    ↓
-Phase 2: Backend Core (retrieval + answer/refusal logic)
-    ↓
-Phase 3: Frontend (chat UI)          ─┐
-    ↓                                 │ (can start once Phase 2's
-Phase 4: Integration (frontend ↔      │  API contract is defined,
-         backend wired end-to-end)   ─┘  even before full logic works)
-    ↓
-Phase 5: Evaluation & Bug Fixing
-    ↓
-Phase 6: Deployment
-    ↓
-Phase 7: Post-Deploy Verification & Handoff
-```
-
-**Key dependency notes:**
-- Phase 3 (Frontend) only needs the `/chat` API *contract* (request/response shape) from Phase 2 to begin — it does not need to wait for retrieval logic to be fully correct. This lets frontend and backend logic proceed with minimal blocking.
-- Phase 5 (Evaluation) cannot start meaningfully until Phase 4 (Integration) is complete, since it tests the whole loop.
-- Phase 6 (Deployment) requires Phase 5's baseline hallucination-rate measurement to exist (per PRD acceptance criteria — before/after comparison).
-
----
-
-## 4. Phase 0 — Setup
-
-**Goal:** A clean, reproducible project skeleton with no leftover code from the prior haphazard build (per existing notes: complete rebuild, not a patch).
-
-| Task | Priority | Depends on |
+| User | Description | Core need |
 |---|---|---|
-| Initialize new repo with clean file structure (`/backend`, `/frontend` or single Streamlit app, `/data`, `/eval`) | Must | — |
-| Set up Python environment + dependency file (requirements.txt / pyproject.toml) | Must | Repo init |
-| Configure environment variable handling for API keys (no hardcoded secrets) | Must | Repo init |
-| Set up `.gitignore` (exclude secrets, vector index artifacts if large, `__pycache__`) | Must | Repo init |
-| Create README skeleton (to be filled in Phase 6/7) | Should | Repo init |
+| Primary: Student (Class 9–11, science stream) | Preparing for school exams or foundational competitive exam prep | Fast, trustworthy, in-scope answers to syllabus questions |
+| Secondary: Self-learner using the syllabus as a structured curriculum | Uses NCERT-aligned material outside formal schooling | Same as above, plus confidence that answers won't mislead them off-syllabus |
 
-**Definition of Done (Phase 0):**
-- [ ] Repo exists with the agreed folder structure and no residual code from the previous version.
-- [ ] Dependencies install cleanly in a fresh environment.
-- [ ] No API key or secret appears in any tracked file.
-- [ ] A placeholder README exists with project name and one-line description.
+Out of scope for this PRD: teachers/admins, parents, and any users outside the Class 9–11 science scope.
 
----
+## 3. Goals
 
-## 5. Phase 1 — Data Layer
+1. Let a student have a natural chat conversation about topics within their syllabus and get answers grounded in that syllabus content (not hallucinated, not off-scope).
+2. Make the system explicitly refuse or redirect when a question falls outside the syllabus scope, rather than answering anyway.
+3. Ship a working, demoable, deployed product within a small time budget, with measurable quality (hallucination rate, scope-refusal accuracy) rather than a vague "it works" claim.
 
-**Goal:** Class 9–11 science syllabus content is chunked, embedded, and queryable.
+### Non-goals (for this version)
+- Teaching methodology innovation (e.g., adaptive learning paths, spaced repetition).
+- Replacing a tutor for step-by-step problem solving (that's a v2 concern — Socratic hints — not this MVP).
+- Supporting every subject/grade — scope is intentionally narrow.
 
-| Task | Priority | Depends on |
+## 4. Core Features (MVP)
+
+1. **Syllabus-grounded Q&A chat** — student types a question; system retrieves relevant syllabus content (via embeddings + retrieval) and answers using only that retrieved context.
+2. **Scope detection & refusal** — if a question is outside the ingested syllabus (wrong subject, wrong grade, or general knowledge unrelated to the corpus), the bot says so explicitly instead of guessing.
+3. **Source/context transparency (lightweight)** — answer indicates which topic/chapter it drew from, so the student can cross-check against their textbook.
+4. **Simple chat UI** — single conversation window, no login/auth complexity, deployed and publicly reachable via a shareable link.
+
+## 5. MVP Scope
+
+**In scope:**
+- Single syllabus corpus: Class 9–11 science (as already chunked/ingested).
+- Text-only input and output (no OCR, no image upload, no voice).
+- Single-turn-aware chat (can reference immediately preceding turns, not long-term memory across sessions).
+- One deployed instance (Streamlit Community Cloud or Hugging Face Spaces), no user accounts.
+- A fixed evaluation set (~20 questions: in-scope, out-of-scope, edge cases) used to measure and report hallucination/groundedness before and after tuning.
+
+**Explicitly excluded from MVP** (see Section 9): step-by-step guided hint system, OCR/image input, multi-subject support, user accounts/progress tracking, real-time co-working rooms, mobile app.
+
+## 6. User Stories
+
+1. *As a student*, I want to ask a question about a topic in my syllabus and get a clear, correct answer, so that I can resolve a doubt without searching multiple sources.
+2. *As a student*, I want the bot to tell me when my question is outside my syllabus, so that I don't get misled into thinking incorrect or irrelevant content is part of my exam scope.
+3. *As a student*, I want to see which chapter/topic an answer came from, so that I can verify it against my textbook.
+4. *As a student*, I want to ask a natural follow-up question in the same conversation, so that I don't have to repeat context every time.
+5. *As the product owner*, I want a labeled test set and hallucination-rate metric, so that I can objectively demonstrate the bot's reliability rather than relying on anecdotal testing.
+
+## 7. Success Metrics
+
+| Metric | Target for MVP |
+|---|---|
+| Hallucination rate (answers not grounded in retrieved context) | Reduced from baseline measurement to a documented, meaningfully lower rate on the same 20-question test set |
+| Scope-refusal accuracy (correctly declines out-of-scope questions) | Bot correctly identifies and refuses ≥ 90% of out-of-scope test questions |
+| Answer relevance (in-scope questions answered correctly/partially) | ≥ 80% of in-scope test questions answered correctly or partially correctly |
+| Deployment | Publicly accessible demo link + GitHub repo with README (problem, approach, metrics, screenshots) |
+
+## 8. Assumptions
+
+- The Class 9–11 science syllabus content is already available and can be chunked and embedded (existing project asset).
+- A single LLM (via API) is available and affordable enough for both answering and any groundedness-check calls.
+- Users access the tool via a browser; no native mobile app is needed for MVP.
+- 20 test questions are sufficient to demonstrate directional quality improvement for MVP purposes (not a statistically rigorous benchmark).
+- No sensitive personal/student data is collected — no login means no PII to protect at this stage.
+
+## 9. Out-of-Scope Features (for MVP)
+
+- OCR / image-based question input (e.g., photographing a handwritten problem).
+- Step-by-step Socratic hint system for math problem-solving (planned as a later phase, not MVP).
+- Multi-subject or multi-grade support beyond Class 9–11 science.
+- User accounts, login, progress tracking, or personalized learning paths.
+- Real-time collaborative/co-working study rooms.
+- Voice input/output.
+- Mobile-native application.
+- Advanced guardrail layers beyond basic scope-refusal (e.g., dedicated hint-leakage detection, multi-model groundedness voting) — a simple, single-pass grounding check is sufficient for MVP.
+
+## 10. Risks
+
+| Risk | Impact | Mitigation |
 |---|---|---|
-| Confirm source syllabus content is available in a usable text format | Must | Phase 0 |
-| Define chunking strategy (chunk size, overlap) — starting defaults, to be tuned later | Must | Source content confirmed |
-| Write ingest script: chunk → embed → write to vector store (Chroma/FAISS) | Must | Chunking strategy |
-| Tag each chunk with topic/chapter metadata (required for source-label display, EDU-FR-009) | Must | Ingest script |
-| Run ingest script, confirm vector store loads and returns results for a sample query | Must | Ingest script + tagging |
+| Retrieval quality is poor (wrong chunks returned) → hallucinations persist | High | Tune chunk size/overlap; validate against test set before declaring MVP done |
+| LLM answers fluently even when context is insufficient (doesn't "know" to refuse) | High | Explicit prompt constraint: answer only from provided context, refuse otherwise; validate via test set |
+| Small test set (20 questions) gives a false sense of confidence | Medium | Clearly label metrics as directional/MVP-level in README; expand test set in future phase |
+| Scope creep into hint-system or OCR mid-build | Medium | This PRD explicitly excludes them; defer to a separate PRD/phase |
+| Hosting limits (Streamlit Community Cloud / HF Spaces free tier) cause downtime or slow responses | Low–Medium | Acceptable for MVP demo purposes; document as known limitation |
 
-**Definition of Done (Phase 1):**
-- [ ] Ingest script runs end-to-end from raw syllabus text to a loadable vector index.
-- [ ] Every chunk has an associated topic/chapter label (EDU-DATA-001).
-- [ ] A manual test query against the vector store returns plausible, relevant chunks.
-- [ ] Ingest is a separate, re-runnable step from the runtime app (per Architecture Section 10 — not built at request time).
+## 11. Acceptance Criteria
 
----
+The MVP is considered complete when all of the following are true:
 
-## 6. Phase 2 — Backend Core
-
-**Goal:** A working `/chat` endpoint implementing retrieval, the relevance-threshold decision, answer generation, and refusal logic — independent of any frontend.
-
-| Task | Priority | Depends on |
-|---|---|---|
-| Define `/chat` request/response contract (per Architecture Section 5) | Must | Phase 0 |
-| Implement input validation (non-empty, ≤500 chars, sanitize) — EDU-VAL-001–003 | Must | Contract defined |
-| Implement retrieval service: embed question, query vector store, return top-k + scores | Must | Phase 1 |
-| Implement relevance-threshold decision logic (answer vs. refusal) — EDU-BR-003 | Must | Retrieval service |
-| Implement context-constrained prompt construction + LLM call for in-scope questions | Must | Threshold logic |
-| Implement refusal response path (no LLM call) — EDU-FR-011, EDU-FR-012 | Must | Threshold logic |
-| Implement `/health` endpoint | Should | Phase 1 vector store loaded |
-| Implement evaluation logger (question, chunk IDs, scores, classification) — EDU-DATA-004 | Must | Retrieval + decision logic |
-| Implement error handling (LLM timeout, vector store failure, malformed scores) — EDU-ERR-001–003 | Must | Core logic above |
-| Implement basic mixed-scope and ambiguous-follow-up handling — EDU-EDGE-001, EDU-EDGE-002 | Should | Core logic above |
-
-**Definition of Done (Phase 2):**
-- [ ] `/chat` endpoint callable via curl/Postman, returns correct shape for both answer and refusal cases.
-- [ ] Validation rejects empty, over-length, and malicious/injection-style input as specified.
-- [ ] Refusal path never calls the LLM (verifiable via logs).
-- [ ] Evaluation logger writes an entry for every request, without user-identifying data.
-- [ ] Simulated failures (kill LLM call, corrupt vector store path) produce the specified generic error response, not a crash or stack trace.
+- [ ] Student can open the deployed app and have a multi-turn chat conversation about Class 9–11 science topics.
+- [ ] For in-scope questions, answers are grounded in retrieved syllabus content and indicate the source topic/chapter.
+- [ ] For out-of-scope questions, the bot explicitly states the question is outside its syllabus scope rather than attempting to answer.
+- [ ] A documented 20-question test set exists with logged results (correct / partial / hallucinated) for both a baseline run and a post-fix run.
+- [ ] Hallucination rate on the test set is measurably lower after the fix than the baseline, with both numbers reported.
+- [ ] Scope-refusal accuracy on the test set is ≥ 90%.
+- [ ] App is deployed and reachable via a public link (Streamlit Community Cloud or Hugging Face Spaces).
+- [ ] GitHub repository is public (or shareable) with a README covering: problem statement, approach, metrics (before/after), and screenshots of the working chat.
 
 ---
 
-## 7. Phase 3 — Frontend
-
-**Goal:** The single-screen chat UI per the UI/UX document, wired to a mocked or early version of the `/chat` contract.
-
-| Task | Priority | Depends on |
-|---|---|---|
-| Build header, chat panel, composer layout (Streamlit primitives) | Must | Phase 2 contract defined (not full logic) |
-| Implement Empty State with example chips | Must | Layout |
-| Implement message bubble rendering (user, bot-answer, bot-refusal) | Must | Layout |
-| Implement composer validation (char limit, disable-on-submit) — mirrors EDU-VAL | Must | Layout |
-| Implement loading indicator | Should | Layout |
-| Implement "New conversation" reset | Should | Layout |
-| Implement error/retry bubble UI | Should | Layout |
-| Apply typography, color tokens, spacing per UI/UX Sections 12–14 | Should | All components above |
-| Verify responsive behavior at mobile/tablet/desktop breakpoints | Should | All components above |
-
-**Definition of Done (Phase 3):**
-- [ ] All states from UI/UX Section 9 (empty, loading, answer, refusal, clarification, error) are visually implemented, even if wired to mock data.
-- [ ] Composer enforces validation rules matching backend rules (defense-in-depth, not a substitute for backend validation).
-- [ ] Layout verified at the three breakpoints defined in UI/UX Section 10.
-- [ ] Basic keyboard operability confirmed (Tab/Enter through composer and buttons).
-
----
-
-## 8. Phase 4 — Integration
-
-**Goal:** Frontend and backend connected end-to-end; a real question typed in the UI produces a real grounded answer or refusal.
-
-| Task | Priority | Depends on |
-|---|---|---|
-| Wire frontend composer submit → backend `/chat` call | Must | Phase 2 + Phase 3 |
-| Wire backend response → correct bubble state rendering (answer/refusal/error) | Must | Above |
-| Wire source-topic label display from backend response | Must | Above |
-| Implement multi-turn context passing (last 1–2 turns) frontend → backend | Must | Above |
-| Implement Retry action re-sending the failed question | Should | Above |
-| Smoke-test full loop manually with 5–10 ad hoc questions (in-scope and out-of-scope) | Must | All above |
-
-**Definition of Done (Phase 4):**
-- [ ] A student can ask an in-scope question in the deployed-locally app and receive a grounded answer with a source label.
-- [ ] An out-of-scope question produces a refusal bubble, not a fabricated answer.
-- [ ] A follow-up question correctly uses prior turn context.
-- [ ] Simulated backend failure surfaces the error/retry UI correctly (not a frozen or broken UI).
-
----
-
-## 9. Phase 5 — Evaluation and Bug Fixing
-
-**Goal:** Objective measurement of quality, and fixes targeted at the top hallucination cause — matching the PRD's core success metrics.
-
-| Task | Priority | Depends on |
-|---|---|---|
-| Build the 20-question labeled test set (in-scope, out-of-scope, edge cases) | Must | Phase 4 |
-| Run baseline evaluation pass, log correct/partial/hallucinated per question | Must | Test set + Phase 4 |
-| Analyze failures, identify top hallucination cause (chunking, prompt constraint, threshold miscalibration) | Must | Baseline pass |
-| Apply targeted fix (e.g., adjust chunk size/overlap, tighten prompt instructions, adjust relevance threshold) | Must | Root cause identified |
-| Re-run the same 20-question test set, compare before/after | Must | Fix applied |
-| Fix any UI/UX bugs surfaced during evaluation (e.g., broken states, layout issues) | Should | Evaluation runs |
-| Verify edge cases from SRS Section 9 explicitly (mixed-scope, ambiguous follow-up, rapid double-submit, vague question) | Must | Phase 4 |
-| Adversarial test: attempt prompt-injection / scope-override phrasing (EDU-EDGE-003, EDU-SEC-003) | Must | Phase 4 |
-
-**Definition of Done (Phase 5):**
-- [ ] Documented before/after hallucination rate on the identical 20-question set.
-- [ ] Scope-refusal accuracy ≥ 90% on the test set (per SRS EDU-PERF/Acceptance targets).
-- [ ] All SRS edge cases (Section 9) manually verified with documented expected vs. actual outcome.
-- [ ] No prompt-injection attempt in testing successfully overrides scope restriction.
-- [ ] All "Must"-priority bugs found during evaluation are fixed; "Should"-priority bugs are logged if deferred.
-
----
-
-## 10. Phase 6 — Deployment
-
-**Goal:** Publicly reachable, stable deployment matching the Architecture document's target platform.
-
-| Task | Priority | Depends on |
-|---|---|---|
-| Configure secrets (API keys) in the hosting platform's secrets manager | Must | Phase 5 complete |
-| Deploy to Streamlit Community Cloud or Hugging Face Spaces | Must | Secrets configured |
-| Verify `/health` (or equivalent readiness check) on the deployed instance | Must | Deployed |
-| Re-run the 20-question test set against the deployed instance (not just local) | Must | Deployed |
-| Verify performance thresholds informally (response time under normal use) — EDU-PERF-001 | Should | Deployed |
-| Finalize README (problem, approach, before/after metrics, screenshots, live link) | Must | Deployed + verified |
-| Push final code to public/shareable GitHub repo | Must | README finalized |
-
-**Definition of Done (Phase 6):**
-- [ ] App is live at a public URL and functions identically to the locally tested version.
-- [ ] Test set results on the deployed instance match (or are close to) local results — no deployment-induced regression.
-- [ ] README is complete per PRD acceptance criteria (problem, approach, metrics, screenshots).
-- [ ] Repository is public/shareable with no secrets committed.
-
----
-
-## 11. Phase 7 — Post-Deploy Verification and Handoff
-
-**Goal:** Final sign-off against the PRD/SRS acceptance criteria as a single checklist, and a clear record of what's deferred to v2/v3.
-
-| Task | Priority | Depends on |
-|---|---|---|
-| Walk through PRD Section 11 acceptance criteria end-to-end on the live app | Must | Phase 6 |
-| Walk through SRS Section 12 acceptance criteria end-to-end on the live app | Must | Phase 6 |
-| Document known limitations (free-tier hosting, 20-question eval size, English-only, etc.) in README | Should | Phase 6 |
-| Log deferred items explicitly (OCR, Socratic hints, guardrail expansion) as "future work," not silently dropped | Should | Phase 6 |
-
-**Definition of Done (Phase 7):**
-- [ ] Every PRD and SRS acceptance-criteria checkbox is verifiably true on the deployed app (not just "should work").
-- [ ] README explicitly states known MVP limitations, so they read as intentional scoping, not oversights.
-- [ ] A short "Future Work" section lists v2 (Socratic hints) and v3 (guardrails/expanded eval) as named next phases.
-
----
-
-## 12. Milestones Summary
-
-| Milestone | Marks completion of | Exit condition |
-|---|---|---|
-| **M0 – Project Skeleton Ready** | Phase 0 | Clean repo, dependencies install, no secrets committed. |
-| **M1 – Corpus Queryable** | Phase 1 | Vector store returns relevant, labeled chunks for sample queries. |
-| **M2 – Backend Functional (Standalone)** | Phase 2 | `/chat` works correctly via direct API calls, including refusal and error paths. |
-| **M3 – Frontend Built (Standalone)** | Phase 3 | All UI states implemented against mock data. |
-| **M4 – End-to-End Working** | Phase 4 | A real question in the UI produces a real, correct answer or refusal. |
-| **M5 – Quality Verified** | Phase 5 | Documented before/after metrics meet PRD/SRS targets. |
-| **M6 – Live and Documented** | Phase 6 | Public URL live, README complete, repo public. |
-| **M7 – MVP Sign-Off** | Phase 7 | All PRD/SRS acceptance criteria checked off on the live app. |
-
----
-
-## 13. MVP Scope Recap (Do-Not-Exceed List)
-
-To prevent scope drift mid-build, this plan builds **only**:
-- Single-corpus (Class 9–11 science), text-only, single-session chat.
-- Retrieval-grounded answers with source labeling.
-- Explicit scope refusal for out-of-scope questions.
-- A single deployed Streamlit app with no auth, no accounts, no admin surface.
-- A 20-question evaluation set and before/after quality measurement.
-
-**Not built in this plan** (confirmed out-of-scope per PRD Section 9): OCR/image input, Socratic hint system, multi-subject/grade support, user accounts, real-time co-working rooms, voice I/O, native mobile app, advanced multi-layer guardrails.
-
----
-
-## 14. Overall Definition of Done (MVP)
-
-The EduBot MVP is complete when **all** of the following hold simultaneously:
-
-- [ ] All Phase 0–7 phase-level DoD checklists are satisfied.
-- [ ] All PRD Section 11 acceptance criteria pass on the live deployment.
-- [ ] All SRS Section 12 acceptance criteria pass on the live deployment.
-- [ ] All UI/UX Section 16 acceptance criteria pass on the live deployment.
-- [ ] All Architecture Section 14 acceptance criteria pass on the live deployment.
-- [ ] Public GitHub repo + live demo link both work when tested from a clean browser session (no cached state assumptions).
-- [ ] Documented hallucination-rate and scope-refusal-accuracy numbers exist and meet the PRD's stated targets.
+*Next phases (post-MVP, separate PRDs): v2 — Socratic Hint System for step-by-step math guidance; v3 — expanded guardrails and evaluation framework (~40–50 test cases, groundedness/hint-leakage checks).*
